@@ -6,7 +6,7 @@ from datetime import datetime
 import httpx
 from httpx_oauth.clients.google import GoogleOAuth2
 import os
-
+import asyncio
 
 # Database initialization
 def init_db():
@@ -18,20 +18,16 @@ def init_db():
         password=st.secrets["mysql"]["password"]
     )
     c = conn.cursor()
-    # Users table
     c.execute('''CREATE TABLE IF NOT EXISTS users 
                  (email VARCHAR(255) PRIMARY KEY, role VARCHAR(50))''')
-    # KPIs table
     c.execute('''CREATE TABLE IF NOT EXISTS kpis 
                  (metric VARCHAR(50) PRIMARY KEY, threshold FLOAT)''')
-    # Performance table
     c.execute('''CREATE TABLE IF NOT EXISTS performance 
                  (id INT AUTO_INCREMENT PRIMARY KEY, agent_email VARCHAR(255), 
                   attendance FLOAT, quality_score FLOAT, product_knowledge FLOAT, 
                   contact_success_rate FLOAT, onboarding FLOAT, reporting FLOAT, 
                   talk_time FLOAT, resolution_rate FLOAT, aht FLOAT, csat FLOAT, 
                   call_volume INT, date VARCHAR(50))''')
-    # Insert specified users
     default_users = [
         ('tutumelchizedek8@gmail.com', 'Manager'),
         ('pammirembe@gmail.com', 'Manager'),
@@ -42,28 +38,25 @@ def init_db():
     conn.commit()
     conn.close()
 
-
 # OAuth setup
-async def get_google_user(client, token):
-    user_info = await client.get_userinfo(token['access_token'])
-    return user_info['email']
-
-
-async def authenticate_with_google():
-    client = GoogleOAuth2(
+def get_google_client():
+    return GoogleOAuth2(
         client_id=st.secrets["oauth"]["client_id"],
         client_secret=st.secrets["oauth"]["client_secret"]
     )
-    # Use deployed URL if available, else fallback to localhost
+
+async def get_authorization_url(client):
     redirect_uri = st.secrets["oauth"]["redirect_uri"]
     if "STREAMLIT_CLOUD_URL" in os.environ:
         redirect_uri = f"{os.environ['STREAMLIT_CLOUD_URL']}"
-    authorization_url = await client.get_authorization_url(
+    return await client.get_authorization_url(
         redirect_uri=redirect_uri,
         scope=["email", "profile"]
     )
-    return client, authorization_url
 
+async def get_google_user(client, token):
+    user_info = await client.get_userinfo(token['access_token'])
+    return user_info['email']
 
 def get_db_connection():
     return mysql.connector.connect(
@@ -74,17 +67,15 @@ def get_db_connection():
         password=st.secrets["mysql"]["password"]
     )
 
-
 # Save KPIs
 def save_kpis(kpis):
     conn = get_db_connection()
     c = conn.cursor()
     for metric, threshold in kpis.items():
-        c.execute("INSERT INTO kpis (metric, threshold) VALUES (%s, %s) ON DUPLICATE KEY UPDATE threshold=%s",
+        c.execute("INSERT INTO kpis (metric, threshold) VALUES (%s, %s) ON DUPLICATE KEY UPDATE threshold=%s", 
                   (metric, threshold, threshold))
     conn.commit()
     conn.close()
-
 
 # Get KPIs
 def get_kpis():
@@ -95,7 +86,6 @@ def get_kpis():
     conn.close()
     return kpis
 
-
 # Save performance data
 def save_performance(agent_email, data):
     conn = get_db_connection()
@@ -104,13 +94,12 @@ def save_performance(agent_email, data):
     c.execute('''INSERT INTO performance 
                  (agent_email, attendance, quality_score, product_knowledge, contact_success_rate, 
                   onboarding, reporting, talk_time, resolution_rate, aht, csat, call_volume, date) 
-                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)''',
-              (agent_email, data['attendance'], data['quality_score'], data['product_knowledge'],
-               data['contact_success_rate'], data['onboarding'], data['reporting'], data['talk_time'],
-               data['resolution_rate'], data['aht'], data['csat'], data['call_volume'], date))
+                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)''', 
+                 (agent_email, data['attendance'], data['quality_score'], data['product_knowledge'], 
+                  data['contact_success_rate'], data['onboarding'], data['reporting'], data['talk_time'], 
+                  data['resolution_rate'], data['aht'], data['csat'], data['call_volume'], date))
     conn.commit()
     conn.close()
-
 
 # Get performance data
 def get_performance(agent_email=None):
@@ -124,11 +113,10 @@ def get_performance(agent_email=None):
     conn.close()
     return df
 
-
 # Assess performance based on KPIs
 def assess_performance(performance_df, kpis):
     results = performance_df.copy()
-    metrics = ['attendance', 'quality_score', 'product_knowledge', 'contact_success_rate',
+    metrics = ['attendance', 'quality_score', 'product_knowledge', 'contact_success_rate', 
                'onboarding', 'reporting', 'talk_time', 'resolution_rate', 'csat', 'call_volume']
     for metric in metrics:
         if metric == 'aht':
@@ -137,7 +125,6 @@ def assess_performance(performance_df, kpis):
             results[f'{metric}_pass'] = results[metric] >= kpis.get(metric, 50)
     results['overall_score'] = results[[f'{m}_pass' for m in metrics]].mean(axis=1) * 100
     return results
-
 
 # Streamlit app
 def main():
@@ -154,10 +141,17 @@ def main():
     # OAuth login
     if not st.session_state.user:
         st.title("Login with Google")
-        client, auth_url = st.runtime.get_instance().loop.run_until_complete(authenticate_with_google())
+        client = get_google_client()
         st.session_state.oauth_client = client
-        st.markdown(f"[Login with Google]({auth_url})")
-
+        
+        # Get authorization URL
+        try:
+            auth_url = asyncio.run(get_authorization_url(client))
+            st.markdown(f"[Login with Google]({auth_url})")
+        except Exception as e:
+            st.error(f"Failed to generate login URL: {str(e)}")
+            return
+        
         # Handle OAuth callback
         query_params = st.query_params
         if query_params:
@@ -167,13 +161,9 @@ def main():
                     redirect_uri = st.secrets["oauth"]["redirect_uri"]
                     if "STREAMLIT_CLOUD_URL" in os.environ:
                         redirect_uri = f"{os.environ['STREAMLIT_CLOUD_URL']}"
-                    token = st.runtime.get_instance().loop.run_until_complete(
-                        client.get_access_token(code, redirect_uri)
-                    )
+                    token = asyncio.run(client.get_access_token(code, redirect_uri))
                     st.session_state.oauth_token = token
-                    email = st.runtime.get_instance().loop.run_until_complete(
-                        get_google_user(client, token)
-                    )
+                    email = asyncio.run(get_google_user(client, token))
                     conn = get_db_connection()
                     c = conn.cursor()
                     c.execute("SELECT role FROM users WHERE email = %s", (email,))
@@ -209,30 +199,17 @@ def main():
             st.header("Set KPI Thresholds")
             kpis = get_kpis()
             with st.form("kpi_form"):
-                attendance = st.number_input("Attendance (%, min)", value=kpis.get('attendance', 95.0), min_value=0.0,
-                                             max_value=100.0)
-                quality_score = st.number_input("Quality Score (%, min)", value=kpis.get('quality_score', 90.0),
-                                                min_value=0.0, max_value=100.0)
-                product_knowledge = st.number_input("Product Knowledge (%, min)",
-                                                    value=kpis.get('product_knowledge', 85.0), min_value=0.0,
-                                                    max_value=100.0)
-                contact_success_rate = st.number_input("Contact Success Rate (%, min)",
-                                                       value=kpis.get('contact_success_rate', 80.0), min_value=0.0,
-                                                       max_value=100.0)
-                onboarding = st.number_input("Onboarding (%, min)", value=kpis.get('onboarding', 90.0), min_value=0.0,
-                                             max_value=100.0)
-                reporting = st.number_input("Reporting (%, min)", value=kpis.get('reporting', 95.0), min_value=0.0,
-                                            max_value=100.0)
-                talk_time = st.number_input("CRM Talk Time (seconds, min)", value=kpis.get('talk_time', 300.0),
-                                            min_value=0.0)
-                resolution_rate = st.number_input("Issue Resolution Rate (%, min)",
-                                                  value=kpis.get('resolution_rate', 80.0), min_value=0.0,
-                                                  max_value=100.0)
+                attendance = st.number_input("Attendance (%, min)", value=kpis.get('attendance', 95.0), min_value=0.0, max_value=100.0)
+                quality_score = st.number_input("Quality Score (%, min)", value=kpis.get('quality_score', 90.0), min_value=0.0, max_value=100.0)
+                product_knowledge = st.number_input("Product Knowledge (%, min)", value=kpis.get('product_knowledge', 85.0), min_value=0.0, max_value=100.0)
+                contact_success_rate = st.number_input("Contact Success Rate (%, min)", value=kpis.get('contact_success_rate', 80.0), min_value=0.0, max_value=100.0)
+                onboarding = st.number_input("Onboarding (%, min)", value=kpis.get('onboarding', 90.0), min_value=0.0, max_value=100.0)
+                reporting = st.number_input("Reporting (%, min)", value=kpis.get('reporting', 95.0), min_value=0.0, max_value=100.0)
+                talk_time = st.number_input("CRM Talk Time (seconds, min)", value=kpis.get('talk_time', 300.0), min_value=0.0)
+                resolution_rate = st.number_input("Issue Resolution Rate (%, min)", value=kpis.get('resolution_rate', 80.0), min_value=0.0, max_value=100.0)
                 aht = st.number_input("Average Handle Time (seconds, max)", value=kpis.get('aht', 600.0), min_value=0.0)
-                csat = st.number_input("Customer Satisfaction (%, min)", value=kpis.get('csat', 85.0), min_value=0.0,
-                                       max_value=100.0)
-                call_volume = st.number_input("Call Volume (calls, min)", value=kpis.get('call_volume', 50),
-                                              min_value=0)
+                csat = st.number_input("Customer Satisfaction (%, min)", value=kpis.get('csat', 85.0), min_value=0.0, max_value=100.0)
+                call_volume = st.number_input("Call Volume (calls, min)", value=kpis.get('call_volume', 50), min_value=0)
                 if st.form_submit_button("Save KPIs"):
                     new_kpis = {
                         'attendance': attendance,
@@ -296,9 +273,8 @@ def main():
                 kpis = get_kpis()
                 results = assess_performance(performance_df, kpis)
                 st.dataframe(results)
-                # Visualization
                 st.subheader("Performance Overview")
-                fig = px.bar(results, x='agent_email', y='overall_score', color='agent_email',
+                fig = px.bar(results, x='agent_email', y='overall_score', color='agent_email', 
                              title="Agent Overall Scores", labels={'overall_score': 'Score (%)'})
                 st.plotly_chart(fig)
             else:
@@ -312,14 +288,12 @@ def main():
             kpis = get_kpis()
             results = assess_performance(performance_df, kpis)
             st.dataframe(results)
-            # Visualization
             st.subheader("Your Performance")
-            fig = px.line(results, x='date', y='overall_score', title="Your Score Over Time",
+            fig = px.line(results, x='date', y='overall_score', title="Your Score Over Time", 
                           labels={'overall_score': 'Score (%)'})
             st.plotly_chart(fig)
         else:
             st.write("No performance data available.")
-
 
 if __name__ == "__main__":
     main()
