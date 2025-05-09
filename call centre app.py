@@ -32,7 +32,8 @@ def init_db():
         ('tutumelchizedek8@gmail.com', 'Manager'),
         ('pammirembe@gmail.com', 'Manager'),
         ('daisynahabwe12@gmail.com', 'Agent'),
-        ('tutu.melchizedek@bodabodaunion.ug', 'Agent')
+        ('tutu.melchizedek@bodabodaunion.ug', 'Agent'),
+        (''kyomarobert74@gmail.com', 'Agent')
     ]
     c.executemany("INSERT IGNORE INTO users (email, role) VALUES (%s, %s)", default_users)
     conn.commit()
