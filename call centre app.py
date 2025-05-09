@@ -85,7 +85,7 @@ def save_kpis(kpis):
 def get_kpis():
     conn = get_db_connection()
     c = conn.cursor()
-    c.execute("SELECT metric, threshold from kpis")
+    c.execute("SELECT metric, threshold FROM kpis")
     kpis = {row[0]: row[1] for row in c.fetchall()}
     conn.close()
     return kpis
