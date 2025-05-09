@@ -7,6 +7,7 @@ import httpx
 from httpx_oauth.clients.google import GoogleOAuth2
 import os
 import asyncio
+import json
 
 # Database initialization
 def init_db():
@@ -180,6 +181,9 @@ def main():
                         st.rerun()
                     else:
                         st.error("User not registered. Contact admin.")
+                except httpx.HTTPStatusError as e:
+                    error_response = e.response.json() if e.response.content else {"error": "No response content"}
+                    st.error(f"Login failed: {str(e)}\nDetails: {json.dumps(error_response, indent=2)}")
                 except Exception as e:
                     st.error(f"Login failed: {str(e)}")
         return
@@ -213,7 +217,8 @@ def main():
                 aht = st.number_input("Average Handle Time (seconds, max)", value=kpis.get('aht', 600.0), min_value=0.0)
                 csat = st.number_input("Customer Satisfaction (%, min)", value=kpis.get('csat', 85.0), min_value=0.0, max_value=100.0)
                 call_volume = st.number_input("Call Volume (calls, min)", value=kpis.get('call_volume', 50), min_value=0)
-                if st.form_submit_button("Save KPIs"):
+                submit_button = st.form_submit_button("Save KPIs")
+                if submit_button:
                     new_kpis = {
                         'attendance': attendance,
                         'quality_score': quality_score,
