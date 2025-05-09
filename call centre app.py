@@ -54,9 +54,12 @@ async def get_authorization_url(client):
         scope=["email", "profile"]
     )
 
-async def get_google_user(client, token):
-    user_info = await client.get_userinfo(token['access_token'])
-    return user_info['email']
+async def get_google_user(token):
+    async with httpx.AsyncClient() as client:
+        headers = {"Authorization": f"Bearer {token['access_token']}"}
+        response = await client.get("https://www.googleapis.com/oauth2/v3/userinfo", headers=headers)
+        response.raise_for_status()
+        return response.json()['email']
 
 def get_db_connection():
     return mysql.connector.connect(
@@ -163,7 +166,7 @@ def main():
                         redirect_uri = f"{os.environ['STREAMLIT_CLOUD_URL']}"
                     token = asyncio.run(client.get_access_token(code, redirect_uri))
                     st.session_state.oauth_token = token
-                    email = asyncio.run(get_google_user(client, token))
+                    email = asyncio.run(get_google_user(token))
                     conn = get_db_connection()
                     c = conn.cursor()
                     c.execute("SELECT role FROM users WHERE email = %s", (email,))
