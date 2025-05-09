@@ -28,11 +28,14 @@ def init_db():
                   contact_success_rate FLOAT, onboarding FLOAT, reporting FLOAT, 
                   talk_time FLOAT, resolution_rate FLOAT, aht FLOAT, csat FLOAT, 
                   call_volume INT, date VARCHAR(50))''')
-    default_users = [
-        ('tutumelchizedek8@gmail.com', 'Manager'),
-        ('pammirembe@gmail.com', 'Manager'),
-        ('daisynahabwe12@gmail.com', 'Agent'),
-        ('tutu.melchizedek@bodabodaunion.ug', 'Agent')
+  default_users = [
+    ('tutumelchizedek8@gmail.com', 'Manager'),
+    ('pammirembe@gmail.com', 'Manager'),
+    ('daisynahabwe12@gmail.com', 'Agent'),
+    ('tutu.melchizedek@bodabodaunion.ug', 'Agent'),
+    ('kyomarobert74@gmail.com', 'Agent')
+]
+
     ]
     c.executemany("INSERT IGNORE INTO users (email, role) VALUES (%s, %s)", default_users)
     conn.commit()
