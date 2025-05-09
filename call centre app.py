@@ -7,6 +7,7 @@ import httpx
 from httpx_oauth.clients.google import GoogleOAuth2
 import os
 import asyncio
+import json
 
 # Database initialization
 def init_db():
@@ -32,8 +33,7 @@ def init_db():
         ('tutumelchizedek8@gmail.com', 'Manager'),
         ('pammirembe@gmail.com', 'Manager'),
         ('daisynahabwe12@gmail.com', 'Agent'),
-        ('tutu.melchizedek@bodabodaunion.ug', 'Agent'),
-        ('kyomarobert74@gmail.com', 'Agent')
+        ('tutu.melchizedek@bodabodaunion.ug', 'Agent')
     ]
     c.executemany("INSERT IGNORE INTO users (email, role) VALUES (%s, %s)", default_users)
     conn.commit()
@@ -181,6 +181,10 @@ def main():
                         st.rerun()
                     else:
                         st.error("User not registered. Contact admin.")
+                except httpx.HTTPStatusError as e:
+                    # Capture detailed error response from Google
+                    error_response = e.response.json() if e.response.content else {"error": "No response content"}
+                    st.error(f"Login failed: {str(e)}\nDetails: {json.dumps(error_response, indent=2)}")
                 except Exception as e:
                     st.error(f"Login failed: {str(e)}")
         return
