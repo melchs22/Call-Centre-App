@@ -218,7 +218,8 @@ def main():
                 aht = st.number_input("Average Handle Time (seconds, max)", value=kpis.get('aht', 600.0), min_value=0.0)
                 csat = st.number_input("Customer Satisfaction (%, min)", value=kpis.get('csat', 85.0), min_value=0.0, max_value=100.0)
                 call_volume = st.number_input("Call Volume (calls, min)", value=kpis.get('call_volume', 50), min_value=0)
-                if st.form_submit_button("Save KPIs"):
+                submit_button = st.form_submit_button("Save KPIs")
+                if submit_button:
                     new_kpis = {
                         'attendance': attendance,
                         'quality_score': quality_score,
@@ -256,7 +257,8 @@ def main():
                 aht = st.number_input("Average Handle Time (seconds)", min_value=0.0)
                 csat = st.number_input("Customer Satisfaction (%)", min_value=0.0, max_value=100.0)
                 call_volume = st.number_input("Call Volume (calls)", min_value=0)
-                if st.form_submit_button("Submit Performance"):
+                submit_button = st.form_submit_button("Submit Performance")
+                if submit_button:
                     data = {
                         'attendance': attendance,
                         'quality_score': quality_score,
