@@ -7,7 +7,6 @@ import httpx
 from httpx_oauth.clients.google import GoogleOAuth2
 import os
 import asyncio
-import json
 
 # Database initialization
 def init_db():
@@ -148,15 +147,13 @@ def main():
         client = get_google_client()
         st.session_state.oauth_client = client
         
-        # Get authorization URL
         try:
             auth_url = asyncio.run(get_authorization_url(client))
             st.markdown(f"[Login with Google]({auth_url})")
         except Exception as e:
             st.error(f"Failed to generate login URL: {str(e)}")
             return
-        
-        # Handle OAuth callback
+
         query_params = st.query_params
         if query_params:
             code = query_params.get("code")
@@ -181,15 +178,10 @@ def main():
                         st.rerun()
                     else:
                         st.error("User not registered. Contact admin.")
-                except httpx.HTTPStatusError as e:
-                    # Capture detailed error response from Google
-                    error_response = e.response.json() if e.response.content else {"error": "No response content"}
-                    st.error(f"Login failed: {str(e)}\nDetails: {json.dumps(error_response, indent=2)}")
                 except Exception as e:
                     st.error(f"Login failed: {str(e)}")
         return
 
-    # Logout button
     if st.button("Logout"):
         st.session_state.user = None
         st.session_state.role = None
@@ -197,29 +189,27 @@ def main():
         st.session_state.oauth_token = None
         st.rerun()
 
-    # Manager interface
     if st.session_state.role == "Manager":
         st.title("Manager Dashboard")
         tabs = st.tabs(["Set KPIs", "Input Performance", "View Assessments"])
 
-        # Set KPIs
         with tabs[0]:
             st.header("Set KPI Thresholds")
             kpis = get_kpis()
             with st.form("kpi_form"):
-                attendance = st.number_input("Attendance (%, min)", value=kpis.get('attendance', 95.0), min_value=0.0, max_value=100.0)
-                quality_score = st.number_input("Quality Score (%, min)", value=kpis.get('quality_score', 90.0), min_value=0.0, max_value=100.0)
-                product_knowledge = st.number_input("Product Knowledge (%, min)", value=kpis.get('product_knowledge', 85.0), min_value=0.0, max_value=100.0)
-                contact_success_rate = st.number_input("Contact Success Rate (%, min)", value=kpis.get('contact_success_rate', 80.0), min_value=0.0, max_value=100.0)
-                onboarding = st.number_input("Onboarding (%, min)", value=kpis.get('onboarding', 90.0), min_value=0.0, max_value=100.0)
-                reporting = st.number_input("Reporting (%, min)", value=kpis.get('reporting', 95.0), min_value=0.0, max_value=100.0)
-                talk_time = st.number_input("CRM Talk Time (seconds, min)", value=kpis.get('talk_time', 300.0), min_value=0.0)
-                resolution_rate = st.number_input("Issue Resolution Rate (%, min)", value=kpis.get('resolution_rate', 80.0), min_value=0.0, max_value=100.0)
-                aht = st.number_input("Average Handle Time (seconds, max)", value=kpis.get('aht', 600.0), min_value=0.0)
-                csat = st.number_input("Customer Satisfaction (%, min)", value=kpis.get('csat', 85.0), min_value=0.0, max_value=100.0)
-                call_volume = st.number_input("Call Volume (calls, min)", value=kpis.get('call_volume', 50), min_value=0)
-                submit_button = st.form_submit_button("Save KPIs")
-                if submit_button:
+                attendance = st.number_input("Attendance (%, min)", value=kpis.get('attendance', 95.0))
+                quality_score = st.number_input("Quality Score (%, min)", value=kpis.get('quality_score', 90.0))
+                product_knowledge = st.number_input("Product Knowledge (%, min)", value=kpis.get('product_knowledge', 85.0))
+                contact_success_rate = st.number_input("Contact Success Rate (%, min)", value=kpis.get('contact_success_rate', 80.0))
+                onboarding = st.number_input("Onboarding (%, min)", value=kpis.get('onboarding', 90.0))
+                reporting = st.number_input("Reporting (%, min)", value=kpis.get('reporting', 95.0))
+                talk_time = st.number_input("CRM Talk Time (seconds, min)", value=kpis.get('talk_time', 300.0))
+                resolution_rate = st.number_input("Issue Resolution Rate (%, min)", value=kpis.get('resolution_rate', 80.0))
+                aht = st.number_input("Average Handle Time (seconds, max)", value=kpis.get('aht', 600.0))
+                csat = st.number_input("Customer Satisfaction (%, min)", value=kpis.get('csat', 85.0))
+                call_volume = st.number_input("Call Volume (calls, min)", value=kpis.get('call_volume', 50))
+                submitted = st.form_submit_button("Save KPIs")
+                if submitted:
                     new_kpis = {
                         'attendance': attendance,
                         'quality_score': quality_score,
@@ -236,7 +226,6 @@ def main():
                     save_kpis(new_kpis)
                     st.success("KPIs saved!")
 
-        # Input Performance
         with tabs[1]:
             st.header("Input Agent Performance")
             conn = get_db_connection()
@@ -257,8 +246,8 @@ def main():
                 aht = st.number_input("Average Handle Time (seconds)", min_value=0.0)
                 csat = st.number_input("Customer Satisfaction (%)", min_value=0.0, max_value=100.0)
                 call_volume = st.number_input("Call Volume (calls)", min_value=0)
-                submit_button = st.form_submit_button("Submit Performance")
-                if submit_button:
+                submitted = st.form_submit_button("Submit Performance")
+                if submitted:
                     data = {
                         'attendance': attendance,
                         'quality_score': quality_score,
@@ -275,7 +264,6 @@ def main():
                     save_performance(agent, data)
                     st.success("Performance data saved!")
 
-        # View Assessments
         with tabs[2]:
             st.header("Assessment Results")
             performance_df = get_performance()
@@ -283,14 +271,12 @@ def main():
                 kpis = get_kpis()
                 results = assess_performance(performance_df, kpis)
                 st.dataframe(results)
-                st.subheader("Performance Overview")
                 fig = px.bar(results, x='agent_email', y='overall_score', color='agent_email', 
                              title="Agent Overall Scores", labels={'overall_score': 'Score (%)'})
                 st.plotly_chart(fig)
             else:
                 st.write("No performance data available.")
 
-    # Agent interface
     elif st.session_state.role == "Agent":
         st.title(f"Agent Dashboard - {st.session_state.user}")
         performance_df = get_performance(st.session_state.user)
@@ -298,7 +284,6 @@ def main():
             kpis = get_kpis()
             results = assess_performance(performance_df, kpis)
             st.dataframe(results)
-            st.subheader("Your Performance")
             fig = px.line(results, x='date', y='overall_score', title="Your Score Over Time", 
                           labels={'overall_score': 'Score (%)'})
             st.plotly_chart(fig)
